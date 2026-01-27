@@ -1,0 +1,41 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+    "name": "PatchGuru",
+    // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+    "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+    "features": {
+        "ghcr.io/devcontainers-contrib/features/poetry:2": {},
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {
+            "moby": true,
+            "azureDnsAutoDetection": true,
+            "installDockerBuildx": true,
+            "installDockerComposeSwitch": true,
+            "version": "latest",
+            "dockerDashComposeVersion": "latest"
+        }
+    },
+
+    // Use 'postCreateCommand' to run commands after the container is created.
+    "postCreateCommand": "./.devcontainer/postCreateCommand.sh",
+
+    // Disable __pycache__ generation
+    "containerEnv": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+    },
+
+    // Configure tool-specific properties.
+    "customizations": {
+        "vscode": {
+            "extensions": ["ms-python.python", "editorconfig.editorconfig"],
+            "settings": {
+                "python.testing.pytestArgs": ["tests"],
+                "python.testing.unittestEnabled": false,
+                "python.testing.pytestEnabled": true,
+                "python.defaultInterpreterPath": "/workspaces/PatchGuru/.venv/bin/python",
+                "python.testing.pytestPath": "/workspaces/PatchGuru/.venv/bin/pytest"
+            }
+        }
+    },
+    "shutdownAction": "none"
+}
