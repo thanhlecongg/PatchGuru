@@ -22,6 +22,10 @@ for project in PROJECTS:
     regression_completion_rates = []
     combined_completion_rates = []
     
+    for data_id in os.listdir(f".cache/oracles/{project}"):
+        if data_id not in data_ids:
+            print(f"Data ID {data_id} not in target list for project {project}, skipping.")
+
     for data_id in data_ids:
         patchguru_dir = f".cache/mutation_testing/{project}/patchguru" + f"/{data_id}"
         regression_dir = f".cache/mutation_testing/{project}/regression_tests" + f"/{data_id}"

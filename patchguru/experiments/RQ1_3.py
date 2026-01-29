@@ -51,6 +51,7 @@ def analyze(project):
     bug_found_prs = []
 
     log_results = parse_logs(log_dir)
+    failure_reasons = {}
     for data_id in data_ids:
         is_failed = False
         data_path = os.path.join(result_dir, data_id, "results.json")
@@ -59,40 +60,72 @@ def analyze(project):
             continue
         with open(data_path, "r") as f:
             data = json.load(f)
-        if data["stage"] in ["completed", "failed"]:
-            if data["stage"] == "completed":
-                llm_queries = data["llm_queries"]
-                if data["review_conclusion"] == "BUG":
-                    bug_found_prs.append((os.path.join(result_dir, data_id), data["execution_status"][-1]["error_message"]))
-                    n_warnings += 1
+        if data["stage"] == "completed":
+            llm_queries = data["llm_queries"]
+            if data["review_conclusion"] == "BUG":
+                bug_found_prs.append((os.path.join(result_dir, data_id), data["execution_status"][-1]["error_message"]))
+                n_warnings += 1
 
-                elif data["review_conclusion"] == "NORMAL":
-                    phase2_path = os.path.join(result_dir, data_id, "phase2", "results.json")
-                    assert os.path.exists(phase2_path), f"Phase 2 results not found for PR {data_id}"
-                    with open(phase2_path, "r") as f:
-                        phase2_data = json.load(f)
-                    if phase2_data["stage"] == "completed":
-                        llm_queries += phase2_data["llm_queries"]
-                        if phase2_data["review_conclusion"] == "BUG":
-                            n_warnings += 1
-                            bug_found_prs.append((os.path.join(result_dir, data_id, "phase2"), phase2_data["execution_status"][-1]["error_message"]))
-                        elif phase2_data["review_conclusion"] == "NORMAL":
-                            n_normal_cases += 1
+            elif data["review_conclusion"] == "NORMAL":
+                phase2_path = os.path.join(result_dir, data_id, "phase2", "results.json")
+                assert os.path.exists(phase2_path), f"Phase 2 results not found for PR {data_id}"
+                with open(phase2_path, "r") as f:
+                    phase2_data = json.load(f)
+                if phase2_data["stage"] == "completed":
+                    llm_queries += phase2_data["llm_queries"]
+                    if phase2_data["review_conclusion"] == "BUG":
+                        n_warnings += 1
+                        bug_found_prs.append((os.path.join(result_dir, data_id, "phase2"), phase2_data["execution_status"][-1]["error_message"]))
+                    elif phase2_data["review_conclusion"] == "NORMAL":
+                        n_normal_cases += 1
+                elif phase2_data["stage"] == "failed":
+                    is_failed = True
+                    n_failures += 1
+                    if "error_repair" in phase2_data and not phase2_data["error_repair"]:
+                        failure_reasons["error_repair"] = failure_reasons.get("error_repair", 0) + 1
+                    elif "assert_review" in phase2_data and not phase2_data["assert_review"]:
+                        # Find last event message with pr_nb is -1
+                        for event in log_results[data_id]["events"][::-1]:
+                            if event["pr_nb"] == -1:
+                                if event["message"] == "Failed to parse LLM response for test driver review":
+                                    failure_reasons["query_error"] = failure_reasons.get("query_error", 0) + 1
+                                else:
+                                    print(data_id, log_results[data_id]["log_dir"])
+                                    exit()
+                                break
                     else:
-                        is_failed = True
-                        n_failures += 1
-
+                        failure_reasons["query_error"] = failure_reasons.get("query_error", 0) + 1
                 else:
-                    raise ValueError(f"Unknown review conclusion: {data['review_conclusion']}")
-            else:
-                is_failed = True
-                n_failures += 1
-                continue
-            if not is_failed:
-                assert len(log_results[data_id]["llm_usage"]) == llm_queries, f"LLM queries mismatch for PR {data_id}: log {len(log_results[data_id]['llm_usage'])}, result {llm_queries}, {log_results[data_id]['log_dir']}"
-        else:
-            incompleted_prs.append(data_id)
+                    is_failed = True
+                    failure_reasons["query_error"] = failure_reasons.get("query_error", 0) + 1
+                    n_failures += 1
 
+            else:
+                raise ValueError(f"Unknown review conclusion: {data['review_conclusion']}")
+        elif data["stage"] == "failed":
+            is_failed = True
+            n_failures += 1
+            if "error_repair" in data and not data["error_repair"]:
+                failure_reasons["error_repair"] = failure_reasons.get("error_repair", 0) + 1
+            elif "assert_review" in data and not data["assert_review"]:
+                for event in log_results[data_id]["events"][::-1]:
+                    if event["pr_nb"] == -1:
+                        if event["message"] == "Failed to parse LLM response for test driver review":
+                            failure_reasons["query_error"] = failure_reasons.get("query_error", 0) + 1
+                        else:
+                            print(data_id, log_results[data_id]["log_dir"])
+                            exit()
+                        break
+            else:
+                failure_reasons["query_error"] = failure_reasons.get("query_error", 0) + 1
+        else:
+            is_failed = True
+            failure_reasons["query_error"] = failure_reasons.get("query_error", 0) + 1
+            n_failures += 1
+        if not is_failed:
+            assert len(log_results[data_id]["llm_usage"]) == llm_queries, f"LLM queries mismatch for PR {data_id}: log {len(log_results[data_id]['llm_usage'])}, result {llm_queries}, {log_results[data_id]['log_dir']}"
+
+    
     summary = {
         "Total PRs": len(data_ids),
         "#Warnings": n_warnings,
@@ -122,9 +155,9 @@ def analyze(project):
         first_event_time = datetime.strptime(first_event_time, "%Y%m%d-%H%M%S")
         last_event_time = datetime.strptime(last_event_time, "%Y%m%d-%H%M%S")
         duration = (last_event_time - first_event_time).total_seconds()
-        time_usage[pr_nb] = duration
+        time_usage[pr_nb] = duration/60
 
-    return input_token_usage, output_token_usage, time_usage, summary
+    return input_token_usage, output_token_usage, time_usage, summary, failure_reasons
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -136,6 +169,7 @@ if __name__ == "__main__":
     output_token_usage = {}
     time_usage = {}
     summary = {}
+    failure_reasons = {}
     _MAPPING = {
         "pandas": "Pandas",
         "scipy": "SciPy",
@@ -144,12 +178,14 @@ if __name__ == "__main__":
     }
     for project in ["pandas", "scipy", "keras", "marshmallow"]:
         project_name = _MAPPING[project]
-        project_input_token_usage, project_output_token_usage, project_time_usage, project_summary = analyze(project)
+        project_input_token_usage, project_output_token_usage, project_time_usage, project_summary, project_failure_reasons = analyze(project)
         input_token_usage[project_name] = project_input_token_usage
         output_token_usage[project_name] = project_output_token_usage
         time_usage[project_name] = project_time_usage
         summary[project_name] = project_summary
-        
+        for reason, count in project_failure_reasons.items():
+            failure_reasons[reason] = failure_reasons.get(reason, 0) + count
+    
     # Read results of annotated warnings if available
     if os.path.exists(".cache/WarningAnnotation.xlsx"):
         for project in summary.keys():
@@ -176,6 +212,9 @@ if __name__ == "__main__":
     df_summary = pd.DataFrame.from_dict(summary, orient="index")
     print(df_summary)      
 
+    print("Failure Reasons Summary:")
+    for reason, count in failure_reasons.items():
+        print(f"{reason}: {count}")
     # Print overall summary of average token usage and time usage
     overall_records = []
     merged_time = []
@@ -193,7 +232,7 @@ if __name__ == "__main__":
             "Project": project,
             "Avg Input Tokens": round(avg_input_tokens, 1),
             "Avg Output Tokens": round(avg_output_tokens, 1),
-            "Avg Time (m)": round(avg_time/60, 1),
+            "Avg Time (m)": round(avg_time, 1),
             "#Oracles": n_oracles,
             "Cost Input ($)": round(avg_input_tokens * (0.25 / 1_000_000), 6),
             "Cost Output ($)": round(avg_output_tokens * (2.0 / 1_000_000), 6),
@@ -205,7 +244,7 @@ if __name__ == "__main__":
         "Project": "Overall",
         "Avg Input Tokens": round(np.mean(merged_input_tokens), 1),
         "Avg Output Tokens": round(np.mean(merged_output_tokens), 1),
-        "Avg Time (m)": round(np.mean(merged_time)/60, 1),
+        "Avg Time (m)": round(np.mean(merged_time), 1),
         "#Oracles": sum([summary[proj]["#Oracles"] for proj in summary]),
         "Cost Input ($)": round(np.mean(merged_input_tokens) * (0.25 / 1_000_000), 6),
         "Cost Output ($)": round(np.mean(merged_output_tokens) * (2.0 / 1_000_000), 6),
@@ -223,7 +262,7 @@ if __name__ == "__main__":
     metrics = [
         ("input_token_usage", "Input Tokens"),
         ("output_token_usage", "Output Tokens"),
-        ("time_usage", "Time (seconds)")
+        ("time_usage", "Time (minutes)")
     ]
 
     # Formatter to display thousands as K on y-axis
@@ -249,6 +288,12 @@ if __name__ == "__main__":
                 return f"${dollars:.3f}"
             return f"${dollars:.2f}"
         return FuncFormatter(_fmt)
+    
+    # Calculate shared y-axis limits for token plots
+    all_input_values = [val for proj_data in input_token_usage.values() for val in proj_data.values()]
+    all_output_values = [val for proj_data in output_token_usage.values() for val in proj_data.values()]
+    token_y_min = 0
+    token_y_max = max(max(all_input_values), max(all_output_values)) * 1.05  # Add 5% padding
     
     for metric_key, metric_label in metrics:
         metric_data = [input_token_usage, output_token_usage, time_usage]
@@ -298,6 +343,10 @@ if __name__ == "__main__":
         ax.tick_params(axis='y', labelsize=20)
         # Format y-axis ticks as K for thousands
         ax.yaxis.set_major_formatter(FuncFormatter(k_formatter))
+        
+        # Set shared y-axis limits for token plots
+        if metric_key in ["input_token_usage", "output_token_usage"]:
+            ax.set_ylim(token_y_min, token_y_max)
 
         # Add corresponding right-side cost axis for token plots
         rate = None
