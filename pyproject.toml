@@ -2,9 +2,9 @@
 name = "PatchGuru"
 version = "0.0.1"
 description = "PatchGuru is an LLM-powered tool that automatically infer patch oracles from natural language artifacts in pull requests and utilizes them to detect the inconsistencies between code changes and their corresponding descriptions."
-authors = ["Thanh Le-Cong <thanhcls1316@gmail.com>"]
+authors = []
 repository = "https://github.com/thanhlecongg/PatchGuru"
-documentation = "https://thanhlecongg.github.io/PatchGuru/"
+documentation = ""
 readme = "README.md"
 packages = [
   {include = "patchguru"}
