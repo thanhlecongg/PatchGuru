@@ -41,6 +41,10 @@ If you wish to setup a new target project, please provide a script following set
 
 ## Usage
 
+> [!NOTE]
+> PatchGuru currently supports only pull requests that modify a single source function (excluding test functions).
+
+
 `patchguru/SpecInfer.py` is the main entry point to run PatchGuru. To apply it to a specific PR of a project, please use the following command:
 
 ```
