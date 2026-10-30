@@ -1,8 +1,12 @@
 # PatchGuru: Patch Oracle Inference from Natural Language Artifacts with Large Language Models
 
 PatchGuru is an LLM-powered tool that automatically infer patch oracles from natural language artifacts in pull requests and utilizes them to detect the inconsistencies between code changes and their corresponding descriptions.
-
-Paper: [TO BE RELEASE]()
+<p align="center"> 
+<a href="https://arxiv.org/abs/2602.05270"><img src="https://img.shields.io/badge/arXiv-2602.05270-b31b1b.svg?style=for-the-badge">
+    <a href="[https://zenodo.org/records/6369874](https://figshare.com/s/02089e7f903926ad0cdf)"><img src="https://img.shields.io/badge/Replication-figshare.02089e-blue?style=for-the-badge">
+    </a>
+</a>
+</p>
 
 ## Installation
 
